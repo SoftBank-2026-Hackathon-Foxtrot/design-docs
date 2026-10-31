@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS → GCP 마이그레이션 단계</title>
+<meta name="description" content="AWS에서 GCP로 서비스를 무중단에 가깝게 옮기는 6단계 흐름">
+<style>
+:root{
+  --bg:#ffffff;--surface-1:#f7f6f2;--text-primary:#1f1e1d;--text-secondary:#5f5e5a;--t:#73726c;
+  --border:#e3e1da;--border-strong:#c9c7bf;--accent-bg:#e6f1fb;--accent-text:#0c447c;--accent-border:#378add;
+  --warn-bg:#faeeda;--warn-text:#854f0b;--ok-bg:#eaf3de;--ok-text:#3b6d11;
+  --teal-fill:#E1F5EE;--teal-stroke:#0F6E56;--teal-t:#085041;--teal-s:#0F6E56;
+  --purple-fill:#EEEDFE;--purple-stroke:#534AB7;--purple-t:#3C3489;--purple-s:#534AB7;
+  --gray-fill:#F1EFE8;--gray-stroke:#888780;--gray-t:#444441;--gray-s:#5F5E5A;
+  --line-purple:#7F77DD;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1f1e1d;--surface-1:#2a2927;--text-primary:#f1efe8;--text-secondary:#b4b2a9;--t:#9c9a92;
+    --border:#3a3936;--border-strong:#55534e;--accent-bg:#0c447c;--accent-text:#e6f1fb;--accent-border:#85b7eb;
+    --warn-bg:#633806;--warn-text:#fac775;--ok-bg:#27500a;--ok-text:#c0dd97;
+    --teal-fill:#085041;--teal-stroke:#5DCAA5;--teal-t:#E1F5EE;--teal-s:#9FE1CB;
+    --purple-fill:#3C3489;--purple-stroke:#AFA9EC;--purple-t:#EEEDFE;--purple-s:#CECBF6;
+    --gray-fill:#444441;--gray-stroke:#B4B2A9;--gray-t:#F1EFE8;--gray-s:#D3D1C7;
+    --line-purple:#AFA9EC;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1f1e1d;--surface-1:#2a2927;--text-primary:#f1efe8;--text-secondary:#b4b2a9;--t:#9c9a92;
+  --border:#3a3936;--border-strong:#55534e;--accent-bg:#0c447c;--accent-text:#e6f1fb;--accent-border:#85b7eb;
+  --warn-bg:#633806;--warn-text:#fac775;--ok-bg:#27500a;--ok-text:#c0dd97;
+  --teal-fill:#085041;--teal-stroke:#5DCAA5;--teal-t:#E1F5EE;--teal-s:#9FE1CB;
+  --purple-fill:#3C3489;--purple-stroke:#AFA9EC;--purple-t:#EEEDFE;--purple-s:#CECBF6;
+  --gray-fill:#444441;--gray-stroke:#B4B2A9;--gray-t:#F1EFE8;--gray-s:#D3D1C7;
+  --line-purple:#AFA9EC;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:720px;margin:0 auto;padding:16px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.pill{border:0.5px solid var(--border-strong);background:transparent;color:var(--text-secondary);border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;font-family:inherit}
+.pill.on{background:var(--accent-bg);color:var(--accent-text);border-color:var(--accent-border)}
+.nav{border:0.5px solid var(--border-strong);background:transparent;color:var(--text-primary);border-radius:8px;padding:7px 16px;font-size:13px;cursor:pointer;font-family:inherit}
+.nav:disabled{opacity:.4;cursor:default}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin:6px 0 12px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+.card{border:0.5px solid var(--border);border-radius:12px;padding:14px 16px}
+.card-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.ttl{font-size:16px;font-weight:500}
+.tag{font-size:12px;padding:2px 8px;border-radius:8px}
+.tag.stateful{background:var(--warn-bg);color:var(--warn-text)}
+.tag.stateless{background:var(--ok-bg);color:var(--ok-text)}
+.tag.common{background:var(--surface-1);color:var(--text-secondary)}
+.card ul{margin:8px 0 10px;padding-left:20px;font-size:14px;line-height:1.7}
+.meta{font-size:13px;color:var(--text-secondary);line-height:1.7}
+.navrow{display:flex;justify-content:space-between;margin-top:12px}
+svg text{font-family:inherit}
+.th{font-size:14px;font-weight:500;fill:var(--text-primary)}
+.ts{font-size:12px;fill:var(--text-secondary)}
+.box{fill:var(--surface-1);stroke:var(--border-strong)}
+.arr{stroke:var(--t);stroke-width:1.5;fill:none}
+.c-teal>rect{fill:var(--teal-fill);stroke:var(--teal-stroke)}.c-teal>.th{fill:var(--teal-t)}.c-teal>.ts{fill:var(--teal-s)}
+.c-purple>rect{fill:var(--purple-fill);stroke:var(--purple-stroke)}.c-purple>.th{fill:var(--purple-t)}.c-purple>.ts{fill:var(--purple-s)}
+.c-gray>rect{fill:var(--gray-fill);stroke:var(--gray-stroke)}.c-gray>.th{fill:var(--gray-t)}.c-gray>.ts{fill:var(--gray-s)}
+</style>
+</head>
+<body>
+<main>
+<h1 class="sr-only">AWS에서 GCP로 서비스를 옮기는 6단계 흐름</h1>
+<div id="pills" class="pills"></div>
+<div id="dia"></div>
+<div class="legend">
+  <span><span class="sw" style="background:var(--teal-fill);border:0.5px solid var(--teal-stroke)"></span>서비스 중 / primary</span>
+  <span><span class="sw" style="background:var(--purple-fill);border:0.5px solid var(--purple-stroke)"></span>복제 중, 읽기 전용</span>
+  <span><span class="sw" style="border:0.5px dashed var(--gray-stroke)"></span>미배포, 대기, 삭제</span>
+  <span>실선 = 트래픽, 점선 = 데이터 복제 또는 크로스 클라우드 접속</span>
+</div>
+<div class="card">
+  <div class="card-head"><span id="ttl" class="ttl"></span><span id="tag" class="tag"></span></div>
+  <ul id="desc"></ul>
+  <div class="meta"><div>중단: <span id="down"></span></div><div>롤백: <span id="rb"></span></div></div>
+</div>
+<div class="navrow">
+  <button id="prev" class="nav" onclick="go(cur-1)">이전</button>
+  <button id="next" class="nav" onclick="go(cur+1)">다음</button>
+</div>
+</main>
+<script>
+(function(){
+  var t=new URLSearchParams(location.search).get('theme');
+  if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);
+})();
+const P=[
+{n:'0. 준비',t:'common',tl:'공통',tr:[100,0],
+a:{app:['on','서비스 중'],db:['on','Primary'],st:['on','서비스 중']},
+g:{app:['off','미배포'],db:['off','미생성'],st:['off','미생성']},
+L:{aA:1},
+d:['AWS와 GCP를 VPN 또는 Interconnect로 연결','DNS TTL을 60초 이하로 낮춰서 빠른 전환과 롤백 준비','GCP 인프라를 Terraform 같은 IaC로 미리 생성'],
+dn:'없음',rb:'해당 없음'},
+{n:'1. 데이터 복제',t:'stateful',tl:'Stateful',tr:[100,0],
+a:{app:['on','서비스 중'],db:['on','Primary'],st:['on','서비스 중']},
+g:{app:['off','미배포'],db:['rep','복제본, 읽기 전용'],st:['rep','동기화 중']},
+L:{aA:1,cdc:1,sync:1},
+d:['DMS로 DB 전체 복사 후 CDC로 변경분을 계속 동기화','S3 데이터를 GCS로 벌크 복사하고 증분 동기화 유지','GCP DB는 아직 읽기 전용 복제본이라 서비스에 영향 없음'],
+dn:'없음',rb:'복제 작업을 중단하고 GCP 리소스 삭제'},
+{n:'2. Stateless 배포와 카나리',t:'stateless',tl:'Stateless',tr:[95,5],
+a:{app:['on','서비스 중'],db:['on','Primary'],st:['on','서비스 중']},
+g:{app:['on','카나리 트래픽 처리'],db:['rep','복제본, 읽기 전용'],st:['rep','동기화 중']},
+L:{aA:1,gx:1,cdc:1,sync:1},
+d:['GCP에 앱 서버를 배포하되 DB는 아직 AWS를 VPN 너머로 사용','DNS 가중치로 트래픽 일부만 GCP로 보내서 동작 검증','크로스 클라우드 지연이 붙으므로 비율은 작게, 기간은 짧게'],
+dn:'없음',rb:'DNS 가중치를 AWS 100%로 되돌리기'},
+{n:'3. DB 컷오버',t:'stateful',tl:'Stateful',tr:[95,5],
+a:{app:['on','서비스 중'],db:['rep','역방향 복제본'],st:['rep','롤백용 보관']},
+g:{app:['on','카나리 트래픽 처리'],db:['on','Primary로 승격'],st:['on','서비스 중']},
+L:{gA:1,ax:1,rev:1},
+d:['쓰기를 잠깐 멈추고 복제 지연이 0이 되면 Cloud SQL을 promote','AWS와 GCP의 모든 앱이 GCP DB를 바라보도록 접속 대상 변경','롤백 대비로 GCP에서 AWS로 가는 역방향 복제 시작'],
+dn:'쓰기만 수십 초에서 수 분 중단, 읽기는 유지',rb:'역방향 복제본인 RDS로 다시 컷오버'},
+{n:'4. 트래픽 전환',t:'stateless',tl:'Stateless',tr:[0,100],
+a:{app:['off','롤백용 대기'],db:['rep','역방향 복제본'],st:['rep','롤백용 보관']},
+g:{app:['on','서비스 중'],db:['on','Primary'],st:['on','서비스 중']},
+L:{gA:1,rev:1},
+d:['DB 컷오버 직후 GCP 비율을 단계적으로 빠르게 100%까지 올림','AWS 앱 서버는 끄지 않고 롤백용으로 대기','역방향 복제는 안정화될 때까지 유지'],
+dn:'없음',rb:'RDS로 역컷오버 후 DNS 가중치를 AWS로 복귀'},
+{n:'5. 정리',t:'common',tl:'공통',tr:[0,100],
+a:{app:['off','삭제'],db:['off','삭제'],st:['off','삭제']},
+g:{app:['on','서비스 중'],db:['on','Primary'],st:['on','서비스 중']},
+L:{gA:1},
+d:['보통 2~4주 안정화 기간 후 역방향 복제 중단','AWS 리소스를 삭제하고 DNS TTL을 원래 값으로 복구'],
+dn:'없음',rb:'이 시점부터는 롤백 불가'}
+];
+let cur=0;
+const CL={on:'c-teal',rep:'c-purple',off:'c-gray'};
+function box(x,y,title,s){
+  const dash=s[0]==='off'?' stroke-dasharray="4 3"':'';
+  return `<g class="${CL[s[0]]}"><rect x="${x}" y="${y}" width="200" height="50" rx="8" stroke-width="0.5"${dash}/><text class="th" x="${x+100}" y="${y+17}" text-anchor="middle" dominant-baseline="central">${title}</text><text class="ts" x="${x+100}" y="${y+35}" text-anchor="middle" dominant-baseline="central">${s[1]}</text></g>`;
+}
+function tl(d,p){
+  const w=p>0?(1+p/100*3):1,op=p>0?1:0.25,da=p>0?'':' stroke-dasharray="3 4"';
+  return `<path d="${d}" fill="none" stroke="var(--t)" stroke-width="${w}" opacity="${op}"${da} marker-end="url(#arrow)"/>`;
+}
+function rep(x1,x2,y,label){
+  return `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="var(--line-purple)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/><text class="ts" x="340" y="${y+15}" text-anchor="middle" dominant-baseline="central">${label}</text>`;
+}
+function render(){
+  const p=P[cur],L=p.L;
+  let s=`<svg width="100%" viewBox="0 0 680 430" role="img"><title>${p.n}</title><desc>${p.d.join(' ')}</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>`;
+  s+=`<rect class="box" x="280" y="10" width="120" height="36" rx="8" stroke-width="0.5"/><text class="th" x="340" y="28" text-anchor="middle" dominant-baseline="central">사용자</text>`;
+  s+=`<line x1="340" y1="46" x2="340" y2="66" class="arr" marker-end="url(#arrow)"/>`;
+  s+=`<rect class="box" x="220" y="68" width="240" height="44" rx="8" stroke-width="0.5"/><text class="th" x="340" y="90" text-anchor="middle" dominant-baseline="central">DNS 가중치 / 글로벌 LB</text>`;
+  s+=tl('M300 112 L300 140 L165 140 L165 197',p.tr[0])+tl('M380 112 L380 140 L515 140 L515 197',p.tr[1]);
+  s+=`<text class="th" x="232" y="128" text-anchor="middle" dominant-baseline="central">${p.tr[0]}%</text><text class="th" x="448" y="128" text-anchor="middle" dominant-baseline="central">${p.tr[1]}%</text>`;
+  s+=`<rect x="40" y="160" width="250" height="250" rx="16" fill="none" stroke="var(--border-strong)" stroke-width="0.5" stroke-dasharray="5 4"/><text class="th" x="56" y="182">AWS</text>`;
+  s+=`<rect x="390" y="160" width="250" height="250" rx="16" fill="none" stroke="var(--border-strong)" stroke-width="0.5" stroke-dasharray="5 4"/><text class="th" x="406" y="182">GCP</text>`;
+  s+=box(65,200,'앱 서버',p.a.app)+box(65,270,'DB · RDS',p.a.db)+box(65,340,'S3',p.a.st);
+  s+=box(415,200,'앱 서버',p.g.app)+box(415,270,'DB · Cloud SQL',p.g.db)+box(415,340,'GCS',p.g.st);
+  if(L.aA)s+=`<line x1="165" y1="250" x2="165" y2="268" class="arr" marker-end="url(#arrow)"/>`;
+  if(L.gA)s+=`<line x1="515" y1="250" x2="515" y2="268" class="arr" marker-end="url(#arrow)"/>`;
+  if(L.gx)s+=`<path d="M415 240 L268 283" fill="none" stroke="var(--t)" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>`;
+  if(L.ax)s+=`<path d="M265 240 L412 283" fill="none" stroke="var(--t)" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>`;
+  if(L.cdc)s+=rep(267,412,305,'CDC');
+  if(L.rev)s+=rep(413,268,305,'역방향 CDC');
+  if(L.sync)s+=rep(267,412,365,'동기화');
+  s+='</svg>';
+  document.getElementById('dia').innerHTML=s;
+  document.getElementById('ttl').textContent=p.n;
+  const tg=document.getElementById('tag');tg.textContent=p.tl;tg.className='tag '+p.t;
+  document.getElementById('desc').innerHTML=p.d.map(x=>`<li>${x}</li>`).join('');
+  document.getElementById('down').textContent=p.dn;
+  document.getElementById('rb').textContent=p.rb;
+  document.querySelectorAll('.pill').forEach((b,i)=>b.classList.toggle('on',i===cur));
+  document.getElementById('prev').disabled=cur===0;
+  document.getElementById('next').disabled=cur===P.length-1;
+  try{history.replaceState(null,'','#step-'+cur);}catch(e){}
+}
+function go(i){cur=Math.max(0,Math.min(P.length-1,i));render();}
+document.getElementById('pills').innerHTML=P.map((p,i)=>`<button class="pill" onclick="go(${i})">${p.n}</button>`).join('');
+const m=location.hash.match(/step-(\d)/);if(m)cur=Math.min(P.length-1,+m[1]);
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')go(cur+1);if(e.key==='ArrowLeft')go(cur-1);});
+render();
+</script>
+</body>
+</html>
