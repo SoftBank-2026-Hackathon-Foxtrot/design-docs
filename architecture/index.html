@@ -355,7 +355,7 @@ td .s { display: block; color: var(--muted); font-size: 0.84rem; }
         <text class="ts" x="585" y="225" text-anchor="middle">공통 API 0.2</text>
         <rect class="pl" x="480" y="262" width="210" height="56" rx="5"/>
         <text class="tb" x="585" y="285" text-anchor="middle">오브젝트 이전</text>
-        <text class="ts" x="585" y="305" text-anchor="middle">공통 API 0.2 중 맞는 부분</text>
+        <text class="ts" x="585" y="305" text-anchor="middle">공통 API 0.2</text>
 
         <line class="ln" x1="690" y1="50" x2="738" y2="50" marker-end="url(#c1)"/>
         <line class="ln" x1="690" y1="130" x2="738" y2="130" marker-end="url(#c1)"/>
@@ -384,19 +384,19 @@ td .s { display: block; color: var(--muted); font-size: 0.84rem; }
     <table>
       <thead><tr><th>명령</th><th>DB 이전</th><th>Redis 이전</th><th>오브젝트 이전</th></tr></thead>
       <tbody>
-        <tr><td class="n">PREPARE</td><td class="yes">지원</td><td class="yes">지원</td><td class="no">없음<span class="s">대신 <code>POST /v1/preflight</code>로 점검</span></td></tr>
-        <tr><td class="n">START_SYNC</td><td class="yes">지원 (DMS CDC)</td><td class="yes">지원</td><td class="no">없음<span class="s"><code>POST /v1/migrations</code>가 바로 복사를 시작</span></td></tr>
+        <tr><td class="n">PREPARE</td><td class="yes">지원</td><td class="yes">지원</td><td class="yes">접근·대상 점검, 변경 감지 시작</td></tr>
+        <tr><td class="n">START_SYNC</td><td class="yes">지원 (DMS CDC)</td><td class="yes">지원</td><td class="yes">전체 복사 시작</td></tr>
         <tr><td class="n">QUIESCE</td><td class="yes">PgBouncer PAUSE, 원본 쓰기 차단</td><td>확인만 (정지는 CUTOVER 안에서)</td><td>기록만 (앱은 계속 씀)</td></tr>
         <tr><td class="n">CUTOVER</td><td class="yes">DMS promote, PgBouncer 대상 변경</td><td class="yes">쓰기 정지, 대조, 대상 변경</td><td class="yes">앱 읽기를 양쪽으로, 그다음 쓰기를 대상으로</td></tr>
-        <tr><td class="n">RESUME</td><td class="yes">TARGET · SOURCE</td><td class="yes">TARGET · SOURCE</td><td>TARGET만<span class="s">롤백이 끝나면 앱은 이미 원본을 씀</span></td></tr>
+        <tr><td class="n">RESUME</td><td class="yes">TARGET · SOURCE</td><td class="yes">TARGET · SOURCE</td><td class="yes">TARGET · SOURCE<span class="s">SOURCE는 확인만 (롤백이 이미 원본으로 옮김)</span></td></tr>
         <tr><td class="n">ROLLBACK</td><td>대상 쓰기 전까지만</td><td class="yes">역복제로</td><td class="yes">역복사로, 완료 전까지 언제든</td></tr>
         <tr><td class="n">CANCEL</td><td class="yes">지원</td><td class="yes">지원</td><td class="yes">지원 (CUTOVER 전)</td></tr>
-        <tr><td class="n">RECONCILE</td><td class="yes">지원</td><td class="yes">지원</td><td class="no">없음<span class="s">재시작 때 버킷과 앱 경로를 다시 읽음</span></td></tr>
+        <tr><td class="n">RECONCILE</td><td class="yes">지원</td><td class="yes">지원</td><td class="yes">경로 세대와 따라오지 않은 앱 확인</td></tr>
         <tr><td class="n">FINALIZE</td><td class="yes">지원</td><td class="yes">지원</td><td class="yes">원본 읽기·삭제 중단</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="note prose">세 서버 모두 <code>expectedRevision</code>, <code>transitionId</code>, <code>Idempotency-Key</code>, Bearer 토큰을 받고 상태에 <code>lifecycle</code>, <code>health</code>, <code>allowedActions</code>를 돌려줍니다. 오브젝트 이전 서버의 <code>/routing</code>과 <code>/deletes</code>는 유저 앱이 부르는 경로라 토큰 없이 사설망에서만 엽니다.</p>
+  <p class="note prose">세 서버 모두 같은 계약(<code>contract.json</code>)을 따릅니다. <code>expectedRevision</code>, <code>transitionId</code>, <code>quiesceRef</code>, <code>Idempotency-Key</code>, Bearer 토큰을 받고, 상태에 <code>lifecycle</code>, <code>health</code>, <code>readiness</code>, <code>checks</code>, <code>allowedActions</code>를 돌려줍니다. 결과를 모르는 상태(UNKNOWN)에서는 RECONCILE만 받습니다. 오브젝트 이전 서버의 <code>/routing</code>과 <code>/deletes</code>는 유저 앱이 부르는 경로라 토큰 없이 사설망에서만 엽니다.</p>
 </section>
 
 <section>
@@ -406,8 +406,8 @@ td .s { display: block; color: var(--muted); font-size: 0.84rem; }
     <table>
       <thead><tr><th>단계</th><th>바뀌는 것</th><th>오케스트레이터가 부르는 것</th><th>넘어가는 조건</th><th>되돌리기</th></tr></thead>
       <tbody>
-        <tr><td class="c">0 준비</td><td>대상 환경 생성, Tunnel과 Tailscale 연결</td><td>DB·Redis <code>PREPARE</code>, 오브젝트 <code>preflight</code></td><td>모든 점검 통과</td><td>대상 환경 삭제</td></tr>
-        <tr><td class="c">1 복제 시작</td><td>사용자 영향 없음</td><td>DB·Redis <code>START_SYNC</code>, 오브젝트 생성</td><td>셋 다 READY</td><td><code>CANCEL</code></td></tr>
+        <tr><td class="c">0 준비</td><td>대상 환경 생성, Tunnel과 Tailscale 연결</td><td>세 서버 <code>PREPARE</code></td><td>모든 점검 통과</td><td>대상 환경 삭제</td></tr>
+        <tr><td class="c">1 복제 시작</td><td>사용자 영향 없음</td><td>세 서버 <code>START_SYNC</code></td><td>셋 다 READY</td><td><code>CANCEL</code></td></tr>
         <tr><td class="c">2 오브젝트 전환</td><td>앱의 객체 읽기·쓰기가 GCS로</td><td><code>QUIESCE</code> → <code>CUTOVER</code> → <code>RESUME</code></td><td>오류율·지연이 평소와 같음</td><td><code>ROLLBACK</code></td></tr>
         <tr><td class="c">3 앱 카나리</td><td>GCP 유저 앱이 요청 5%를 받음</td><td>트래픽 서버 95:5</td><td>카나리 오류율이 AWS와 같음</td><td>100:0</td></tr>
         <tr><td class="c">4 DB 전환</td><td>PgBouncer가 Cloud SQL을 가리킴</td><td><code>QUIESCE</code> → <code>CUTOVER</code> → <code>RESUME</code></td><td>쓰기 재개 후 오류 없음, 대조 일치</td><td>대상 쓰기 전까지만 <code>ROLLBACK</code></td></tr>
